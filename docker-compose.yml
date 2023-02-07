@@ -1,48 +1,47 @@
-version: '3'
-
-networks:
-  nginx-php74-mysql8-pma:
-
+version: '3.8'
 services:
 
-  # nginx
+  # Nginx Service
   nginx-service:
     image: nginx:stable-alpine
-    container_name: "${DOCKER_PREFIX}_nginx_container"
+    container_name: "${DOCKER_PREFIX}_nginx"
     ports:
       - "${PORT_NGINX}:80"
     volumes:
-      - ./src:/var/www/src
-      - ./.docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./app:/var/www/php
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - php74-service
-      - mysql8-service
+      - php-service
+      - mysql-service
     networks:
-      - nginx-php74-mysql8-pma
+      - nginx-php-mysq-pma
 
   # php
-  php74-service:
+  php-service:
     build:
       context: .
-      dockerfile: .docker/php/Dockerfile
-    container_name: "${DOCKER_PREFIX}_php74_container"
+      dockerfile: docker/php/Dockerfile
+    container_name: "${DOCKER_PREFIX}_php"
     ports:
       - "${PORT_PHP}:9000"
     volumes:
-      - ./src:/var/www/src
-      - ./.docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./app:/var/www/php
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
     networks:
-      - nginx-php74-mysql8-pma
+      - nginx-php-mysq-pma
+    depends_on:
+      mysql-service:
+        condition: service_healthy
 
   # mysql
-  mysql8-service:
+  mysql-service:
     image: mysql:8
-    container_name: "${DOCKER_PREFIX}_mysql8_container"
+    container_name: "${DOCKER_PREFIX}_mysql"
     ports:
       - "${PORT_MYSQL}:3306"
     volumes:
-      - ./.docker/mysql/data:/var/lib/mysql
-      - ./.docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mysql/data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
     command:
       --default-authentication-plugin=mysql_native_password
       --character-set-server=utf8mb4
@@ -50,17 +49,34 @@ services:
     restart: always # always restart unless stopped manually
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    #   MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_USER: root
+    #   MYSQL_PASSWORD: ${DB_PASSWORD}
     networks:
-      - nginx-php74-mysql8-pma
+      - nginx-php-mysq-pma
+    healthcheck:
+      test: mysqladmin ping -h 127.0.0.1 -u root --password=$$MYSQL_ROOT_PASSWORD
+      interval: 5s
+      retries: 10
 
-  # phpmyadmin
+  # PhpMyAdmin Service
   pma-service:
-    image: phpmyadmin/phpmyadmin
-    container_name: "${DOCKER_PREFIX}_pma_container"
+    image: phpmyadmin/phpmyadmin:5-fpm-alpine
+    container_name: "${DOCKER_PREFIX}_pma"
     environment:
-      PMA_HOST: mysql8-service
+      PMA_HOST: mysql-service
       PMA_PORT: "${PORT_MYSQL}"
     ports:
       - "${PORT_PMA}:80"
+    depends_on:
+      mysql-service:
+        condition: service_healthy
     networks:
-        - nginx-php74-mysql8-pma
+        - nginx-php-mysq-pma
+# Volumes
+# volumes:
+#   mysqldata:
+
+networks:
+  nginx-php-mysq-pma:
