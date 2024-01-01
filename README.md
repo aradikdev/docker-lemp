@@ -59,3 +59,4 @@ Add the following domain to your machine's hosts file:
 ## Copy .env.example to .env:
 
 `cp .env.example .env`
+
